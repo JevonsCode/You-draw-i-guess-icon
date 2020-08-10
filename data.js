@@ -21,11 +21,19 @@ export const getImages = async () => {
             const imgPromise = loadImg(src);
             images.push(imgPromise);
             labels.push([
+                0,
                 +(item === "android"),
                 +(item === "apple"),
-                +(item === "windows")
+                +(item === "windows"),
             ]);
         });
+
+        const src = `http://127.0.0.1:8080/train/white.jpg`;
+        const imgPromise = loadImg(src);
+        images.push(imgPromise);
+        labels.push([
+            1, 0, 0, 0
+        ]);
         ++i;
     }
 

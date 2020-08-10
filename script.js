@@ -5,8 +5,8 @@ import * as tfvis from "@tensorflow/tfjs-vis";
 
 const MOBILENET_MODEL_PATH = "http://127.0.0.1:8080/model.json";
 
-const NUM_CLASSES = 3;
-const BRAND_CLASSES = ['android', 'apple', 'windows'];
+const NUM_CLASSES = 4;
+const BRAND_CLASSES = ['white', 'android', 'apple', 'windows'];
 
 const IMG_WIDTH = 224;
 
@@ -97,7 +97,7 @@ window.onload = async () => {
     });
 
     await model.fit(xs, ys, {
-        epochs: 20,
+        epochs: 150,
         callbacks: tfvis.show.fitCallbacks(
             { name: "训练效果" },
             ["loss"],
