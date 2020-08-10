@@ -8,9 +8,19 @@
 </head>
 
 <body>
-    <div style="padding: 20px;">
-        <canvas id="drawBoard" width="400px" height="400px" style="border: 3px solid #000;"></canvas>
+    <div id="drawBoardBox">
+        <div style="display: flex;">
+            <div style="padding: 20px;">
+                <canvas id="drawBoard" width="224px" height="224px" style="border: 3px solid #000;"></canvas>
+            </div>
+            <div id="png" style="margin: 20px; width: 224px; height: 224px; border: 3px solid rgb(241, 160, 160);">
+            </div>
+        </div>
+        <input type="button" value="清除画布" onclick="window.clearBoard()" />
+        <input type="button" value="撤回" onclick="window.withdraw()" />
+        <!-- <input type="button" value="复原" onclick="window.recovery()" /> -->
     </div>
+    <input type="file" onchange="predict(this.files[0], true)">
 </body>
 <script src="./script.js"></script>
 
