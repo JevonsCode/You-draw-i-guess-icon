@@ -8,13 +8,13 @@ URL = "https://ant.design/components/icon-cn/"
 
 
 def wr(content, fileName):
-    with open("./crawler/static/svg/" + fileName + ".svg", "w", encoding="utf-8") as f:
+    with open("./mobilenet/static/svg/" + fileName + ".svg", "w", encoding="utf-8") as f:
         f.write(content)
 
 
 def svg2png(imgName):
-    svg_path = './crawler/static/svg/' + imgName + '.svg'
-    png_path = './crawler/static/png/' + imgName + '.png'
+    svg_path = './mobilenet/static/svg/' + imgName + '.svg'
+    png_path = './mobilenet/static/png/' + imgName + '.png'
     cairosvg.svg2png(url=svg_path, write_to=png_path)
 
 
@@ -28,7 +28,7 @@ def main():
         svg = e("svg")
         name = e(".ant-badge").text()
         wr(str(svg).replace("width=\"1em\" height=\"1em\" fill=\"currentColor\"",
-                            "width=\"254\" height=\"254\" fill=\"#000000\"").replace("viewbox=\"64 64 896 896\"", "viewBox=\"64 64 896 896\""), str(name))
+                            "width=\"254\" height=\"254\" fill=\"#000000\"").replace("viewbox=", "viewBox="), str(name))
         svg2png(str(name))
 
 
