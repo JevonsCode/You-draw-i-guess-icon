@@ -18,6 +18,9 @@
         </div>
         <input type="button" value="清除画布" onclick="window.clearBoard()" />
         <input type="button" value="撤回" onclick="window.withdraw()" />
+
+        <button onclick="window.clear();" style="margin: 4px;">清除</button>
+        <button onclick="window.predict();" style="margin: 4px;">预测</button>
         <!-- <input type="button" value="复原" onclick="window.recovery()" /> -->
     </div>
     <input type="file" onchange="predict(this.files[0], true)">

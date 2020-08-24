@@ -1,174 +1,139 @@
 import * as tf from "@tensorflow/tfjs";
-import { getImages } from "./data";
-import { img2x, file2img } from "./utils";
 import * as tfvis from "@tensorflow/tfjs-vis";
+import { MnistData } from "./data";
 
-const MOBILENET_MODEL_PATH = "http://127.0.0.1:8080/model.json";
-
-const NUM_CLASSES = 4;
-const BRAND_CLASSES = ['white', 'android', 'apple', 'windows'];
-
-const IMG_WIDTH = 224;
-
-const drawBoard = document.querySelector("#drawBoard");
-const pen = drawBoard.getContext("2d");
-const penWeight = 6;
-const penColor = "#000";
-const drawHistory = [];
-
-const igd = pen.getImageData(0, 0, IMG_WIDTH, IMG_WIDTH)
-const data = igd.data;
-for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 255) {
-        data[i] = 255;
-        data[i + 1] = 255;
-        data[i + 2] = 255;
-        data[i + 3] = 255;
-    }
-}
-pen.putImageData(igd, 0, 0);
-
-function convertCanvasToImage (canvas, p) {
-    p && drawHistory.push(pen.getImageData(0, 0, IMG_WIDTH, IMG_WIDTH));
-
-    const image = new Image();
-    image.src = canvas.toDataURL("image/jpeg");
-    image.width = IMG_WIDTH;
-    image.height = IMG_WIDTH;
-
-    document.querySelector("#png").innerHTML = "";
-    document.querySelector("#png").appendChild(image)
-
-    window.predict(image);
-    return image;
-}
 
 window.onload = async () => {
-    document.querySelector("#drawBoardBox").hidden = true;
+    const data = new MnistData();
+    await data.load();
+    // 加载 20 个验证集
+    const examples = data.nextTestBatch(20);
 
-    const { inputs, labels } = await getImages();
+    const surface = tfvis.visor().surface({ name: "SURFACE 输入示例" });
+    for (let i = 0; i < 20; i++) {
+        const imageTensor = tf.tidy(() => {
+            // reshape 改变形状 28 * 28 * 1
+            return examples.xs.slice([i, 0], [1, 784]).reshape([28, 28, 1])
+        });
 
-    // loadLayersModel: Load a model composed of Layer objects, including its topology and optionally weights.
-    const mobilenet = await tf.loadLayersModel(MOBILENET_MODEL_PATH);
-
-    // 查看一下模型结构，为了更好的思考在哪阶段  // Print a text summary of the model's layers.
-    mobilenet.summary();
-
-    const layer = mobilenet.getLayer("conv_pw_13_relu");
-
-    const truncatedMobilenet = tf.model({
-        inputs: mobilenet.inputs,
-        outputs: layer.output
-    });
+        const canvas = document.createElement("canvas");
+        canvas.width = 28;
+        canvas.height = 28;
+        canvas.style = "margin: 4px;"
+        await tf.browser.toPixels(imageTensor, canvas);
+        surface.drawArea.appendChild(canvas);
+    }
 
     const model = tf.sequential();
 
-    model.add(tf.layers.flatten({
-        // 输出层的输出形状
-        inputShape: layer.outputShape.slice(1)
+    // 卷积层
+    model.add(tf.layers.conv2d({
+        inputShape: [28, 28, 1],
+        // 卷积核大小 （一般为奇数有中心点）
+        kernelSize: 3,
+        filters: 8,
+        // 移动步长
+        strides: 1,
+        activation: "relu",
+        kernelInitializer: "varianceScaling"
     }));
 
+    // 池化层
+    model.add(tf.layers.maxPool2d({
+        poolSize: [2, 2],
+        strides: [2, 2]
+    }));
+
+    model.add(tf.layers.conv2d({
+        kernelSize: 5,
+        filters: 16,
+        strides: 1,
+        activation: "relu",
+        kernelInitializer: "varianceScaling"
+    }));
+
+    model.add(tf.layers.maxPool2d({
+        poolSize: [2, 2],
+        strides: [2, 2]
+    }));
+
+    // 摊平
+    model.add(tf.layers.flatten());
+
     model.add(tf.layers.dense({
-        // 神经元个数
         units: 10,
-        // 激活函数：非线性变化
-        activation: "relu"
+        activation: "softmax",
+        kernelInitializer: "varianceScaling"
     }));
 
-    model.add(tf.layers.dense({
-        // 最后分类的个数
-        units: NUM_CLASSES,
-        activation: "softmax"
-    }));
-
-    // 设置损失函数和优化器
     model.compile({
+        // 损失函数 交叉熵
         loss: "categoricalCrossentropy",
-        optimizer: tf.train.adam()
+        optimizer: tf.train.adam(),
+        // 度量单位 （准确度
+        metrics: "accuracy"
     });
 
-    // 把图片变成截断模型需要的格式
-    const { xs, ys } = tf.tidy(() => {
-        // concat：把两个 tensor 连起来
-        const xs = tf.concat(inputs.map(imgEl => truncatedMobilenet.predict(img2x(imgEl))));
-        const ys = tf.tensor(labels);
-
-        return { xs, ys };
+    const [trainXs, trainYs] = tf.tidy(() => {
+        const d = data.nextTrainBatch(1000);
+        return [
+            d.xs.reshape([1000, 28, 28, 1]),
+            d.labels
+        ];
     });
 
-    await model.fit(xs, ys, {
+    const [testXs, testYs] = tf.tidy(() => {
+        const d = data.nextTestBatch(200);
+        return [
+            d.xs.reshape([200, 28, 28, 1]),
+            d.labels
+        ];
+    });
+
+    await model.fit(trainXs, trainYs, {
+        validationData: [testXs, testYs],
         epochs: 150,
         callbacks: tfvis.show.fitCallbacks(
-            { name: "训练效果" },
-            ["loss"],
-            // 只显示 onEpochEnd
+            { name: "训练过程" },
+            ["loss", "val_loss", "acc", "val_acc"],
             { callbacks: ["onEpochEnd"] }
         )
+    })
+
+    const canvas = document.querySelector("canvas");
+
+    canvas.addEventListener("mousemove", (e) => {
+        if (e.buttons === 1) {
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "rgb(255,255,255)";
+            ctx.fillRect(e.offsetX, e.offsetY, 12, 12);
+        }
     });
 
-    window.predict = async (f, t) => {
-        let img;
-        if (t) {
-            img = await file2img(f);
-        } else {
-            img = f;
-        }
+    window.clear = () => {
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "rgb(0,0,0)";
+        ctx.fillRect(0, 0, 300, 300);
+    }
 
-        const pred = tf.tidy(() => {
-            const input = truncatedMobilenet.predict(img2x(img))
-            return model.predict(input);
+    clear();
+
+    window.predict = () => {
+        const input = tf.tidy(() => {
+            return tf.image.resizeBilinear(
+                tf.browser.fromPixels(canvas),
+                [28, 28],
+                true
+
+            )
+                .slice([0, 0, 0], [28, 28, 1])
+                // 除以 255 因为 255 色彩
+                .toFloat().div(255)
+                .reshape([1, 28, 28, 1]);
         });
-        // 第二维取 1
-        const index = pred.argMax(1).dataSync()[0];
-        console.log("结果", index, BRAND_CLASSES[index]);
+
+        const pred = model.predict(input).argMax(1);
+        alert(`预测结果为：${pred.dataSync()[0]}`);
     }
 
-    document.querySelector("#drawBoardBox").hidden = false;
-
-    drawBoard.onmousedown = (e) => {
-        const start_x = e.clientX - drawBoard.offsetLeft + document.body.scrollLeft;
-        const start_y = e.clientY - drawBoard.offsetTop + document.body.scrollTop;
-        pen.beginPath();
-        pen.moveTo(start_x, start_y);
-        pen.lineCap = 'round';
-        pen.lineJoin = "round";
-        pen.strokeStyle = penColor;
-        pen.lineWidth = penWeight;
-
-
-
-        drawBoard.onmousemove = (e) => {
-            const move_x = e.clientX - drawBoard.offsetLeft + document.body.scrollLeft;
-            const move_y = e.clientY - drawBoard.offsetTop + document.body.scrollTop;
-            pen.lineTo(move_x, move_y);
-            pen.stroke();
-        }
-        drawBoard.onmouseup = (e) => {
-            pen.closePath();
-            drawBoard.onmousemove = null;
-            drawBoard.onmouseup = null;
-            convertCanvasToImage(drawBoard, true);
-        }
-    }
-
-    window.clearBoard = () => {
-        // pen.clearRect(0, 0, IMG_WIDTH, IMG_WIDTH);
-        pen.putImageData(igd, 0, 0);
-        convertCanvasToImage(drawBoard);
-    }
-
-    window.withdraw = () => {
-        if (drawHistory.length === 0) {
-
-            return;
-        }
-        if (drawHistory.length === 1) {
-            pen.putImageData(igd, 0, 0);
-        } else {
-            pen.putImageData(drawHistory[drawHistory.length - 2], 0, 0);
-        }
-        drawHistory.pop();
-        convertCanvasToImage(drawBoard);
-    }
 }
-
